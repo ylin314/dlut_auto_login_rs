@@ -1,0 +1,23 @@
+[package]
+name = "dlut_auto_login_rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+des = "0.7"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+scraper = "0.17"
+clap = { version = "4.5", features = ["derive"] }
+rpassword = "7.4"
+
+[profile.release]
+opt-level = "z"          # 优化体积（比 "s" 更激进）
+lto = true               # Link Time Optimization
+codegen-units = 1        # 更好的 LTO（但编译慢）
+panic = "abort"          # 减少 panic 相关代码
+debug = false            # 不生成调试信息
+overflow-checks = false  # 移除整数溢出检查以减小体积
