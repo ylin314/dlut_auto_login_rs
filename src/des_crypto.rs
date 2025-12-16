@@ -1,5 +1,5 @@
+use des::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
 use des::Des;
-use des::cipher::{NewBlockCipher, BlockEncrypt, BlockDecrypt};
 
 /// Combine keys into a single 8-byte DES key
 fn combine_keys(keys: &[&str]) -> Vec<u8> {
@@ -43,7 +43,12 @@ fn pkcs7_unpad(data: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// Encrypt data using DES (support single, double, and triple DES)
-pub fn str_enc(data: &str, first_key: &str, second_key: &str, third_key: &str) -> Result<String, String> {
+pub fn str_enc(
+    data: &str,
+    first_key: &str,
+    second_key: &str,
+    third_key: &str,
+) -> Result<String, String> {
     if data.is_empty() {
         return Ok(String::new());
     }
@@ -133,7 +138,12 @@ pub fn str_enc(data: &str, first_key: &str, second_key: &str, third_key: &str) -
 
 /// Decrypt data using DES (support single, double, and triple DES)
 #[allow(dead_code)]
-pub fn str_dec(data: &str, first_key: &str, second_key: &str, third_key: &str) -> Result<String, String> {
+pub fn str_dec(
+    data: &str,
+    first_key: &str,
+    second_key: &str,
+    third_key: &str,
+) -> Result<String, String> {
     if data.is_empty() {
         return Ok(String::new());
     }

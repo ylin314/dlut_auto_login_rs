@@ -2,72 +2,107 @@ mod des_crypto;
 mod drcom;
 mod login;
 
-use clap::Parser;
-use std::io::{self, Write};
+use argh::FromArgs;
+use std::thread;
+use std::time::Duration;
 
-#[derive(Parser, Debug)]
-#[command(name = "DLUT Auto Login")]
-#[command(about = "DLUT Campus Network Auto Login Tool", long_about = None)]
+#[derive(FromArgs, Debug)]
+/// DLUT Campus Network Auto Login Tool
 struct Args {
-    #[arg(short, long, help = "Username")]
+    /// username
+    #[argh(option, short = 'u')]
     username: Option<String>,
 
-    #[arg(short, long, help = "Password")]
+    /// password
+    #[argh(option, short = 'p')]
     password: Option<String>,
 
-    #[arg(short, long, help = "IPV4 Address")]
+    /// ipv4 address
+    #[argh(option, short = 'i')]
     ip: Option<String>,
 }
 
-#[tokio::main]
-async fn main() {
-    let args = Args::parse();
+fn main() {
+    let args: Args = argh::from_env();
 
-    let info = match drcom::get_drcom_info().await {
+    let username = match args.username {
+        Some(u) => u,
+        None => {
+            eprintln!("Error: Username is required! (Interactive mode disabled for embedded use)");
+            std::process::exit(1);
+        }
+    };
+
+    let password = match args.password {
+        Some(p) => p,
+        None => {
+            eprintln!("Error: Password is required! (Interactive mode disabled for embedded use)");
+            std::process::exit(1);
+        }
+    };
+
+    // Retry loop for network readiness
+    let mut retry_count = 0;
+    loop {
+        match try_process(&username, &password, args.ip.as_deref()) {
+            Ok(_) => {
+                println!("Done.");
+                break;
+            }
+            Err(e) => {
+                retry_count += 1;
+                eprintln!(
+                    "Attempt {} failed: {}. Retrying in 5 seconds...",
+                    retry_count, e
+                );
+                thread::sleep(Duration::from_secs(5));
+            }
+        }
+    }
+}
+
+fn try_process(
+    username: &str,
+    password: &str,
+    arg_ip: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let info = match drcom::get_drcom_info() {
         Ok(info) => info,
         Err(e) => {
-            eprintln!("Error getting drcom info: {}", e);
-            None
+            // If we can't even reach the drcom page, it might be a network issue.
+            // We propagate the error to trigger a retry.
+            return Err(format!("Error getting drcom info: {}", e).into());
         }
     };
 
     // Check if already online
     if let Some(ref info) = info {
         if info.result == 1 {
-            println!("Current status: Online. Never need to login.");
-            return;
+            println!("Current status: Online. No login needed.");
+            return Ok(());
         }
     }
 
-    let username = args.username.unwrap_or_else(|| {
-        print!("Please enter your username: ");
-        io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-        input.trim().to_string()
-    });
-
-    let password = args.password.unwrap_or_else(|| rpassword::prompt_password("Please enter your password: ").unwrap());
-
-    let ip = if let Some(ip) = args.ip {
-        ip
+    let ip = if let Some(ip) = arg_ip {
+        ip.to_string()
     } else {
         if let Some(ref info) = info {
             if let Some(ip) = &info.v46ip {
                 println!("Detected IP: {}", ip);
                 ip.clone()
             } else {
-                eprintln!("Failed to get local IP address!");
-                return;
+                return Err("Failed to get local IP address from drcom info!".into());
             }
         } else {
-            eprintln!("Failed to get local IP address!");
-            return;
+            return Err("Failed to get local IP address!".into());
         }
     };
 
-    match login::login(&username, &password, &ip).await {
-        Ok(result) => println!("{}", result),
-        Err(e) => eprintln!("Login error: {}", e),
+    match login::login(username, password, &ip) {
+        Ok(result) => {
+            println!("{}", result);
+            Ok(())
+        }
+        Err(e) => Err(format!("Login error: {}", e).into()),
     }
 }

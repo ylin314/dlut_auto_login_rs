@@ -6,42 +6,39 @@ Rust implementation of the DLUT (Dalian University of Technology) campus network
 
 - DES/3DES encryption support for login credentials
 - Automatic network status detection
-- Command-line interface with argument support
-- Secure password input handling
-- Async HTTP requests with timeout support
+- Lightweight CLI for embedded systems (OpenWrt)
+- Synchronous HTTP requests (minimal binary size)
+- Auto-retry mechanism for unattended operation
 
 ## Build
 
 ```bash
 cargo build --release
+# Optional: Strip symbols for smaller binary
+strip target/release/dlut_auto_login_rs
 ```
 
 ## Usage
 
 ### Basic usage with automatic IP detection:
 ```bash
-cargo run -- -u <username> -p <password>
+./dlut_auto_login_rs -u <username> -p <password>
 ```
 
 ### Specify IP address:
 ```bash
-cargo run -- -u <username> -p <password> -i <ip_address>
-```
-
-### Interactive mode (prompts for username and password):
-```bash
-cargo run
+./dlut_auto_login_rs -u <username> -p <password> -i <ip_address>
 ```
 
 ### Get help:
 ```bash
-cargo run -- --help
+./dlut_auto_login_rs --help
 ```
 
 ## Command-line Options
 
-- `-u, --username <USERNAME>`: Username (optional, will prompt if not provided)
-- `-p, --password <PASSWORD>`: Password (optional, will prompt if not provided)
+- `-u, --username <USERNAME>`: Username (required)
+- `-p, --password <PASSWORD>`: Password (required)
 - `-i, --ip <IP>`: IPV4 Address (optional, will auto-detect if not provided)
 
 ## Project Structure
@@ -53,22 +50,19 @@ cargo run -- --help
 
 ## Dependencies
 
-- `reqwest` - HTTP client
-- `tokio` - Async runtime
+- `ureq` - Minimal synchronous HTTP client
 - `des` - DES encryption
 - `hex` - Hex encoding/decoding
 - `serde` - Serialization framework
 - `serde_json` - JSON parsing
-- `scraper` - HTML parsing
-- `clap` - Command-line parsing
-- `rpassword` - Secure password input
+- `argh` - Minimal command-line parsing
 
 ## Notes
 
-- This tool is designed for DLUT campus network login only
+- This tool is optimized for embedded systems (e.g., OpenWrt)
+- Interactive mode has been removed for daemon/script usage
 - The tool checks if you're already online before attempting login
-- If login fails, it will retry up to 3 times with 3-second intervals
-- Requires network connectivity to the campus network
+- If login fails, it will retry indefinitely until success (useful for startup scripts)
 
 ## License
 
