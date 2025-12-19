@@ -5,10 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 /// Extract value from HTML element by id or name using Scraper
-fn extract_value_by_id_or_name(
-    document: &Html,
-    attr_value: &str,
-) -> Result<String, String> {
+fn extract_value_by_id_or_name(document: &Html, attr_value: &str) -> Result<String, String> {
     // Selector for input[id="value"] or input[name="value"]
     let selector_str = format!("input[id='{0}'], input[name='{0}']", attr_value);
     let selector = Selector::parse(&selector_str).map_err(|_| "Invalid selector".to_string())?;
