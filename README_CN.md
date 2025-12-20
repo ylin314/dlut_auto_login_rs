@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- 支持登录凭证的 DES/3DES 加密
+- 支持登录凭证的 3DES 加密
 - 自动检测网络状态
 - 适用于嵌入式系统（如 OpenWrt）的轻量级 CLI
 - 同步 HTTP 请求（最小化二进制体积）
@@ -153,14 +153,14 @@ launchctl load ~/Library/LaunchAgents/com.user.dlut_login.plist
 ## 项目结构
 
 - `src/main.rs` - 入口点和 CLI 处理
-- `src/des_crypto.rs` - DES 加密/解密实现
+- `src/des_crypto.rs` - 3DES 加密/解密实现
 - `src/drcom.rs` - DrCOM 协议处理（网络状态检查）
 - `src/login.rs` - 登录逻辑和表单处理
 
 ## 依赖项
 
 - `ureq` - 极简同步 HTTP 客户端
-- `des` - DES 加密
+- `des` - 3DES 加密
 - `hex` - Hex 编码/解码
 - `serde` - 序列化框架
 - `serde_json` - JSON 解析

@@ -4,7 +4,7 @@ Rust implementation of the DLUT (Dalian University of Technology) campus network
 
 ## Features
 
-- DES/3DES encryption support for login credentials
+- 3DES encryption support for login credentials
 - Automatic network status detection
 - Lightweight CLI for embedded systems (OpenWrt)
 - Synchronous HTTP requests (minimal binary size)
@@ -153,14 +153,14 @@ launchctl load ~/Library/LaunchAgents/com.user.dlut_login.plist
 ## Project Structure
 
 - `src/main.rs` - Entry point and CLI handling
-- `src/des_crypto.rs` - DES encryption/decryption implementation
+- `src/des_crypto.rs` - 3DES encryption/decryption implementation
 - `src/drcom.rs` - DrCOM protocol handling (network status checking)
 - `src/login.rs` - Login logic and form handling
 
 ## Dependencies
 
 - `ureq` - Minimal synchronous HTTP client
-- `des` - DES encryption
+- `des` - 3DES encryption
 - `hex` - Hex encoding/decoding
 - `serde` - Serialization framework
 - `serde_json` - JSON parsing
