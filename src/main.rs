@@ -20,15 +20,43 @@ struct Args {
     /// ipv4 address
     #[argh(option, short = 'i')]
     ip: Option<String>,
+
+    /// get drcom info and exit
+    #[argh(switch)]
+    info: bool,
+
+    /// skip status check before login
+    #[argh(switch)]
+    force: bool,
+
+    /// keep-alive mode (retry loop until success)
+    #[argh(switch)]
+    daemon: bool,
 }
 
 fn main() {
     let args: Args = argh::from_env();
 
+    if args.info {
+        match drcom::get_drcom_info() {
+            Ok(Some(info)) => {
+                println!("Drcom Info: {:?}", info);
+                if info.result == 1 {
+                    println!("Status: Online");
+                } else {
+                    println!("Status: Offline");
+                }
+            }
+            Ok(None) => println!("Failed to get drcom info (parsed as None)."),
+            Err(e) => eprintln!("Error getting drcom info: {}", e),
+        }
+        return;
+    }
+
     let username = match args.username {
         Some(u) => u,
         None => {
-            eprintln!("Error: Username is required! (Interactive mode disabled for embedded use)");
+            eprintln!("Error: Username is required for login!");
             std::process::exit(1);
         }
     };
@@ -36,26 +64,37 @@ fn main() {
     let password = match args.password {
         Some(p) => p,
         None => {
-            eprintln!("Error: Password is required! (Interactive mode disabled for embedded use)");
+            eprintln!("Error: Password is required for login!");
             std::process::exit(1);
         }
     };
 
-    // Retry loop for network readiness
-    let mut retry_count = 0;
-    loop {
-        match try_process(&username, &password, args.ip.as_deref()) {
-            Ok(_) => {
-                println!("Done.");
-                break;
+    if args.daemon {
+        // Retry loop for network readiness
+        let mut retry_count = 0;
+        loop {
+            match try_process(&username, &password, args.ip.as_deref(), args.force) {
+                Ok(_) => {
+                    println!("Done.");
+                    break;
+                }
+                Err(e) => {
+                    retry_count += 1;
+                    eprintln!(
+                        "Attempt {} failed: {}. Retrying in 5 seconds...",
+                        retry_count, e
+                    );
+                    thread::sleep(Duration::from_secs(5));
+                }
             }
+        }
+    } else {
+        // Single attempt
+        match try_process(&username, &password, args.ip.as_deref(), args.force) {
+            Ok(_) => println!("Done."),
             Err(e) => {
-                retry_count += 1;
-                eprintln!(
-                    "Attempt {} failed: {}. Retrying in 5 seconds...",
-                    retry_count, e
-                );
-                thread::sleep(Duration::from_secs(5));
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
             }
         }
     }
@@ -65,6 +104,7 @@ fn try_process(
     username: &str,
     password: &str,
     arg_ip: Option<&str>,
+    force: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let info = match drcom::get_drcom_info() {
         Ok(info) => info,
@@ -76,11 +116,15 @@ fn try_process(
     };
 
     // Check if already online
-    if let Some(ref info) = info {
-        if info.result == 1 {
-            println!("Current status: Online. No login needed.");
-            return Ok(());
+    if !force {
+        if let Some(ref info) = info {
+            if info.result == 1 {
+                println!("Current status: Online. No login needed.");
+                return Ok(());
+            }
         }
+    } else {
+        println!("Force login enabled, skipping status check.");
     }
 
     let ip = if let Some(ip) = arg_ip {

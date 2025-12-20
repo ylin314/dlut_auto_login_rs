@@ -20,9 +20,24 @@ strip target/release/dlut_auto_login_rs
 
 ## Usage
 
-### Basic usage with automatic IP detection:
+### Basic usage (one-time login):
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password>
+```
+
+### Get current network status:
+```bash
+./dlut_auto_login_rs --info
+```
+
+### Force login (skip status check):
+```bash
+./dlut_auto_login_rs -u <username> -p <password> --force
+```
+
+### Keep-alive mode (retry loop):
+```bash
+./dlut_auto_login_rs -u <username> -p <password> --daemon
 ```
 
 ### Specify IP address:
@@ -37,9 +52,12 @@ strip target/release/dlut_auto_login_rs
 
 ## Command-line Options
 
-- `-u, --username <USERNAME>`: Username (required)
-- `-p, --password <PASSWORD>`: Password (required)
+- `-u, --username <USERNAME>`: Username
+- `-p, --password <PASSWORD>`: Password
 - `-i, --ip <IP>`: IPV4 Address (optional, will auto-detect if not provided)
+- `--info`: Get drcom info and exit
+- `--force`: Skip status check before login
+- `--daemon`: Keep-alive mode (retry loop until success)
 
 ## Project Structure
 

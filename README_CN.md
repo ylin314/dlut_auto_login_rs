@@ -20,9 +20,24 @@ strip target/release/dlut_auto_login_rs
 
 ## 使用方法
 
-### 自动检测 IP 的基本用法：
+### 基本用法（单次登录）：
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password>
+```
+
+### 获取当前网络状态：
+```bash
+./dlut_auto_login_rs --info
+```
+
+### 强制登录（跳过在线状态检查）：
+```bash
+./dlut_auto_login_rs -u <username> -p <password> --force
+```
+
+### 守护进程模式（循环重试直到成功）：
+```bash
+./dlut_auto_login_rs -u <username> -p <password> --daemon
 ```
 
 ### 指定 IP 地址：
@@ -37,9 +52,12 @@ strip target/release/dlut_auto_login_rs
 
 ## 命令行选项
 
-- `-u, --username <USERNAME>`: 用户名（必填）
-- `-p, --password <PASSWORD>`: 密码（必填）
+- `-u, --username <USERNAME>`: 用户名
+- `-p, --password <PASSWORD>`: 密码
 - `-i, --ip <IP>`: IPV4 地址（可选，未提供时将自动检测）
+- `--info`: 获取 drcom 信息并退出
+- `--force`: 登录前跳过状态检查
+- `--daemon`: 守护进程模式（持续重试直到成功）
 
 ## 项目结构
 
