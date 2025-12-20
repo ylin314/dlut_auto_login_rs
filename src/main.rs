@@ -46,10 +46,19 @@ fn main() {
             eprintln!("Error: Another instance might be running: {}", e);
             std::process::exit(1);
         }
+
+        // Set up signal handler for PID cleanup
+        let path_for_handler = pid_path.clone();
+        ctrlc::set_handler(move || {
+            println!("\nReceived termination signal. Cleaning up PID file...");
+            let _ = std::fs::remove_file(&path_for_handler);
+            std::process::exit(0);
+        })
+        .expect("Error setting Ctrl-C handler");
     }
 
     if args.info {
-        match drcom::get_drcom_info() {
+        let res = match drcom::get_drcom_info() {
             Ok(Some(info)) => {
                 println!("Drcom Info: {:?}", info);
                 if info.result == 1 {
@@ -57,9 +66,24 @@ fn main() {
                 } else {
                     println!("Status: Offline");
                 }
+                Ok(())
             }
-            Ok(None) => println!("Failed to get drcom info (parsed as None)."),
-            Err(e) => eprintln!("Error getting drcom info: {}", e),
+            Ok(None) => {
+                println!("Failed to get drcom info (parsed as None).");
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("Error getting drcom info: {}", e);
+                Err(e)
+            }
+        };
+
+        if let Some(pid_path) = &args.pid {
+            let _ = std::fs::remove_file(pid_path);
+        }
+
+        if res.is_err() {
+            std::process::exit(1);
         }
         return;
     }
@@ -68,6 +92,9 @@ fn main() {
         Some(u) => u,
         None => {
             eprintln!("Error: Username is required for login!");
+            if let Some(pid_path) = &args.pid {
+                let _ = std::fs::remove_file(pid_path);
+            }
             std::process::exit(1);
         }
     };
@@ -76,6 +103,9 @@ fn main() {
         Some(p) => p,
         None => {
             eprintln!("Error: Password is required for login!");
+            if let Some(pid_path) = &args.pid {
+                let _ = std::fs::remove_file(pid_path);
+            }
             std::process::exit(1);
         }
     };
@@ -91,12 +121,23 @@ fn main() {
         }
     } else {
         // Single attempt
-        match try_process(&username, &password, args.ip.as_deref(), args.force, false) {
-            Ok(_) => println!("Done."),
+        let res = match try_process(&username, &password, args.ip.as_deref(), args.force, false) {
+            Ok(_) => {
+                println!("Done.");
+                Ok(())
+            }
             Err(e) => {
                 eprintln!("Error: {}", e);
-                std::process::exit(1);
+                Err(e)
             }
+        };
+
+        if let Some(pid_path) = &args.pid {
+            let _ = std::fs::remove_file(pid_path);
+        }
+
+        if res.is_err() {
+            std::process::exit(1);
         }
     }
 }

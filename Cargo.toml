@@ -11,6 +11,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 scraper = "0.19"
 argh = "0.1"
+ctrlc = "3.4"
 
 [profile.release]
 opt-level = "z"          # 优化体积（比 "s" 更激进）
