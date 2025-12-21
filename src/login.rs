@@ -1,30 +1,28 @@
 use crate::des_crypto::str_enc;
-use crate::drcom;
-use cookie_store::CookieStore;
+use crate::drcom::get_drcom_info;
 use scraper::{Html, Selector};
 use std::thread;
 use std::time::Duration;
 
-const DEFAULT_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-
-fn extract_text_first(document: &Html, selector: &str) -> Option<String> {
-    let sel = Selector::parse(selector).ok()?;
-    document
-        .select(&sel)
-        .next()
-        .map(|n| n.text().collect::<String>().trim().to_string())
-        .filter(|s| !s.is_empty())
-}
-
-/// Extract value from HTML input element by a specific attribute (e.g., "id" or "name")
-fn extract_input_value(
+/// Extract value from HTML element by id or name attribute
+fn extract_value_by_id_or_name(
     document: &Html,
-    attr_name: &str,
-    attr_value: &str,
+    attribute_type: &str,
+    attribute_value: &str,
 ) -> Result<String, String> {
-    // Selector for input[attr_name="value"]
-    let selector_str = format!("input[{0}='{1}']", attr_name, attr_value);
-    let selector = Selector::parse(&selector_str).map_err(|_| "Invalid selector".to_string())?;
+    let selector_str = match attribute_type {
+        "id" => format!("[id='{}']", attribute_value),
+        "name" => format!("[name='{}']", attribute_value),
+        _ => {
+            return Err(format!(
+                "Attribute type must be 'id' or 'name', but got: {}!",
+                attribute_type
+            ))
+        }
+    };
+
+    let selector =
+        Selector::parse(&selector_str).map_err(|_| "Failed to parse selector".to_string())?;
 
     if let Some(element) = document.select(&selector).next() {
         if let Some(value) = element.value().attr("value") {
@@ -33,13 +31,14 @@ fn extract_input_value(
     }
 
     Err(format!(
-        "Element with {} = {} not found or has no value!",
-        attr_name, attr_value
+        "Element with {} = {} not found!",
+        attribute_type, attribute_value
     ))
 }
 
-/// Perform the actual login
+/// Actual login function
 fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    // Initial URL that redirects to SSO login page
     let initial_url = format!(
         "http://172.20.30.2:8080/Self/sso_login?login_method=1&wlan_user_ip={}&wlan_user_ipv6=&wlan_user_mac=000000000000&wlan_ac_ip=172.20.30.254&wlan_ac_name=&mac_type=1&authex_enable=&type=1",
         ip
@@ -47,143 +46,103 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
 
     println!("Initial login URL: {}", initial_url);
 
+    // Create an agent with cookie support
     let agent = ureq::AgentBuilder::new()
-        .cookie_store(CookieStore::default())
+        .timeout(Duration::from_secs(10))
         .redirects(10)
         .build();
 
-    // First request to get the login form
-    let response = agent
-        .get(&initial_url)
-        .set("User-Agent", DEFAULT_UA)
-        .set(
-            "Accept",
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        )
-        .timeout(Duration::from_secs(10))
-        .call()?;
+    // First, access the initial URL
+    let response = agent.get(&initial_url).call()?;
 
-    // Save the final URL before consuming the response body
-    let sso_login_url = response.get_url();
-    println!("Jumped to sso login page: {}", sso_login_url);
-    let sso_login_url_str = sso_login_url.to_string();
+    // Get the final URL after redirects
+    let final_url = response.get_url().to_string();
 
-    // Read body once (consumes `response`) and extract form values
+    // Read the response body
     let body = response.into_string()?;
+
+    // Parse the HTML
     let document = Html::parse_document(&body);
 
-    let lt_value = extract_input_value(&document, "id", "lt")?;
-    // println!("lt: {}", lt_value);
+    // Extract lt value
+    let lt_value = extract_value_by_id_or_name(&document, "id", "lt")?;
+    println!("lt: {}", lt_value);
 
-    let execution_value = extract_input_value(&document, "name", "execution")?;
-    // println!("execution: {}", execution_value);
+    // Extract execution value
+    let execution_value = extract_value_by_id_or_name(&document, "name", "execution")?;
+    println!("execution: {}", execution_value);
 
-    let event_id_value = extract_input_value(&document, "name", "_eventId")?;
-    // println!("_eventId: {}", event_id_value);
+    // Extract _eventId value
+    let event_id_value = extract_value_by_id_or_name(&document, "name", "_eventId")?;
+    println!("_eventId: {}", event_id_value);
 
-    // Prepare login data
-    let rsa_value = str_enc(
-        &format!("{}{}{}", username, password, lt_value),
-        "1",
-        "2",
-        "3",
-    )?;
+    // Check if we were redirected to SSO login page
+    if final_url != initial_url {
+        println!("跳转到sso登录页面: {}", final_url);
 
-    let username_len_chars = username.chars().count();
-    let password_len_chars = password.chars().count();
-    let ul_str = username_len_chars.to_string();
-    let pl_str = password_len_chars.to_string();
+        // Prepare login data
+        let rsa = str_enc(
+            &format!("{}{}{}", username, password, lt_value),
+            "1",
+            "2",
+            "3",
+        )?;
 
-    let login_data = [
-        ("rsa", rsa_value.as_str()),
-        ("ul", ul_str.as_str()),
-        ("pl", pl_str.as_str()),
-        ("sl", "0"),
-        ("lt", lt_value.as_str()),
-        ("execution", execution_value.as_str()),
-        ("_eventId", event_id_value.as_str()),
-    ];
+        println!("Login form:");
+        println!(
+            "  rsa: {}, ul: {}, pl: {}, sl: 0, lt: {}, execution: {}, _eventId: {}",
+            rsa,
+            username.len(),
+            password.len(),
+            lt_value,
+            execution_value,
+            event_id_value
+        );
 
-    // println!("Login form: {:?}", login_data);
+        // Submit login form
+        let login_response = agent.post(&final_url).send_form(&[
+            ("rsa", &rsa),
+            ("ul", &username.len().to_string()),
+            ("pl", &password.len().to_string()),
+            ("sl", "0"),
+            ("lt", &lt_value),
+            ("execution", &execution_value),
+            ("_eventId", &event_id_value),
+        ])?;
 
-    // Submit login form
-    let login_response = agent
-        .post(&sso_login_url_str)
-        .set("User-Agent", DEFAULT_UA)
-        .set(
-            "Accept",
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        )
-        .set("Referer", &sso_login_url_str)
-        .set("Origin", "https://sso.dlut.edu.cn")
-        .timeout(Duration::from_secs(10))
-        .send_form(&login_data)?;
+        // Check if login was successful by checking the final URL
+        let post_login_url = login_response.get_url().to_string();
 
-    // Check if login was successful by checking for redirection (similar to Python requests' `response.history`)
-    let status = login_response.status();
-    let location = login_response.header("location").map(|v| v.to_string());
-    let final_url = login_response.get_url().to_string();
+        // If we were redirected away from the SSO login page, it might be successful
+        if post_login_url != final_url {
+            println!("Redirection...");
 
-    // Read body (may contain error message on failure). This consumes the response.
-    let response_body = login_response.into_string().unwrap_or_default();
+            // Wait 3 seconds for the backend to update the login status
+            thread::sleep(Duration::from_secs(3));
 
-    let redirected =
-        (300..400).contains(&status) || location.is_some() || final_url != sso_login_url_str;
-
-    if redirected {
-        println!("Redirection detected...");
-
-        // Poll drcom status for a short period (some environments refresh slowly)
-        for i in 0..5 {
-            thread::sleep(Duration::from_secs(2));
-            if let Ok(Some(info)) = drcom::get_drcom_info() {
-                if info.result == 1 {
+            // Check drcom info to confirm login success
+            match get_drcom_info() {
+                Ok(Some(info)) if info.result == 1 => {
                     println!("Login successful!");
                     return Ok(true);
                 }
+                _ => {
+                    println!("Login failed, unable to get drcom info after login.");
+                    return Ok(false);
+                }
             }
-            if i == 0 {
-                println!("Waiting for drcom status to refresh...");
-            }
+        } else {
+            println!(
+                "Login failed, no redirection found. Please check the entered account, password, and IP."
+            );
+            return Ok(false);
         }
-
-        // Minimal diagnostics (avoid printing sensitive data)
-        println!("Login post status: {}, final url: {}", status, final_url);
-        let resp_doc = Html::parse_document(&response_body);
-        if let Some(title) = extract_text_first(&resp_doc, "title") {
-            println!("Response title: {}", title);
-        }
-        if let Some(msg) = extract_text_first(&resp_doc, "#errormsg")
-            .or_else(|| extract_text_first(&resp_doc, ".errors"))
-            .or_else(|| extract_text_first(&resp_doc, ".alert"))
-            .or_else(|| extract_text_first(&resp_doc, "#msg"))
-        {
-            println!("Response message: {}", msg);
-        }
-
-        println!("Login failed: drcom still offline after redirect.");
-        Ok(false)
     } else {
-        // Minimal diagnostics (avoid printing sensitive data)
-        println!("Login failed, no redirection found. Please check the entered account, password, and IP.");
-        println!("Login post status: {}, final url: {}", status, final_url);
-
-        let resp_doc = Html::parse_document(&response_body);
-        if let Some(title) = extract_text_first(&resp_doc, "title") {
-            println!("Response title: {}", title);
-        }
-        if let Some(msg) = extract_text_first(&resp_doc, "#errormsg")
-            .or_else(|| extract_text_first(&resp_doc, ".errors"))
-            .or_else(|| extract_text_first(&resp_doc, ".alert"))
-            .or_else(|| extract_text_first(&resp_doc, "#msg"))
-        {
-            println!("Response message: {}", msg);
-        }
-        Ok(false)
+        return Err("No redirection, direct access!".into());
     }
 }
 
-/// Handle each login attempt
+/// Handle login process with retry mechanism
 pub fn login(
     username: &str,
     password: &str,
@@ -198,9 +157,18 @@ pub fn login(
     let mut attempt_count = 1;
 
     while attempt_count < max_attempts {
+        println!("Attempting to log in for the {}th time...", attempt_count);
+
         match do_login(username, password, ip) {
-            Ok(true) => break,
-            Ok(false) => return Ok(format!("ip: {}, Login failed!", ip)),
+            Ok(true) => {
+                return Ok(format!(
+                    "ip: {}, Please confirm if have successfully connected to the network.",
+                    ip
+                ));
+            }
+            Ok(false) => {
+                return Ok(format!("ip: {}, Login failed!", ip));
+            }
             Err(e) => {
                 println!("Login failed: {}, retrying...", e);
                 attempt_count += 1;
@@ -209,15 +177,40 @@ pub fn login(
         }
     }
 
-    if attempt_count == max_attempts {
-        Ok(format!(
-            "ip: {}, Reached the maximum number of login attempts, login failed!",
-            ip
-        ))
-    } else {
-        Ok(format!(
-            "ip: {}, Please confirm if have successfully connected to the network.",
-            ip
-        ))
+    Ok(format!(
+        "ip: {}, Reached the maximum number of login attempts, login failed!",
+        ip
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_value() {
+        let html = r#"
+        <html>
+            <body>
+                <input type="hidden" id="lt" value="LT-123456" />
+                <input type="hidden" name="execution" value="e1s1" />
+                <input type="hidden" name="_eventId" value="submit" />
+            </body>
+        </html>
+        "#;
+        let document = Html::parse_document(html);
+
+        assert_eq!(
+            extract_value_by_id_or_name(&document, "id", "lt").unwrap(),
+            "LT-123456"
+        );
+        assert_eq!(
+            extract_value_by_id_or_name(&document, "name", "execution").unwrap(),
+            "e1s1"
+        );
+        assert_eq!(
+            extract_value_by_id_or_name(&document, "name", "_eventId").unwrap(),
+            "submit"
+        );
     }
 }
