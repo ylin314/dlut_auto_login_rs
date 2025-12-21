@@ -73,14 +73,19 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
         "3",
     )?;
 
+    let username_len_chars = username.chars().count();
+    let password_len_chars = password.chars().count();
+    let ul_str = username_len_chars.to_string();
+    let pl_str = password_len_chars.to_string();
+
     let login_data = [
         ("rsa", rsa_value.as_str()),
-        ("ul", &username.len().to_string()),
-        ("pl", &password.len().to_string()),
+        ("ul", ul_str.as_str()),
+        ("pl", pl_str.as_str()),
         ("sl", "0"),
-        ("lt", &lt_value),
-        ("execution", &execution_value),
-        ("_eventId", &event_id_value),
+        ("lt", lt_value.as_str()),
+        ("execution", execution_value.as_str()),
+        ("_eventId", event_id_value.as_str()),
     ];
 
     // println!("Login form: {:?}", login_data);
@@ -93,33 +98,53 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
 
     // Check if login was successful by checking for redirection (similar to Python requests' `response.history`)
     let status = login_response.status();
-    let location = login_response.header("location");
-    let final_url = login_response.get_url();
+    let location = login_response.header("location").map(|v| v.to_string());
+    let final_url = login_response.get_url().to_string();
 
-    let redirected = (300..400).contains(&status)
-        || location.is_some()
-        || final_url != sso_login_url_str;
+    // Read body (may contain error message on failure). This consumes the response.
+    let response_body = login_response.into_string().unwrap_or_default();
+
+    let redirected =
+        (300..400).contains(&status) || location.is_some() || final_url != sso_login_url_str;
 
     if redirected {
         println!("Redirection detected...");
 
-        // Wait 5 seconds for backend to refresh data
-        thread::sleep(Duration::from_secs(5));
-
-        if let Ok(Some(info)) = drcom::get_drcom_info() {
-            if info.result == 1 {
-                println!("Login successful!");
-                return Ok(true);
-            } else {
-                println!("Login failed, unable to get drcom info after login.");
-                return Ok(false);
+        // Poll drcom status for a short period (some environments refresh slowly)
+        for i in 0..5 {
+            thread::sleep(Duration::from_secs(2));
+            if let Ok(Some(info)) = drcom::get_drcom_info() {
+                if info.result == 1 {
+                    println!("Login successful!");
+                    return Ok(true);
+                }
             }
-        } else {
-            println!("Login failed, unable to get drcom info after login.");
-            return Ok(false);
+            if i == 0 {
+                println!("Waiting for drcom status to refresh...");
+            }
         }
+
+        // Minimal diagnostics (avoid printing sensitive data)
+        println!("Login post status: {}, final url: {}", status, final_url);
+        if let Ok(title_sel) = Selector::parse("title") {
+            if let Some(title) = Html::parse_document(&response_body)
+                .select(&title_sel)
+                .next()
+                .map(|t| t.text().collect::<String>())
+            {
+                let title = title.trim();
+                if !title.is_empty() {
+                    println!("Response title: {}", title);
+                }
+            }
+        }
+
+        println!("Login failed: drcom still offline after redirect.");
+        Ok(false)
     } else {
+        // Minimal diagnostics (avoid printing sensitive data)
         println!("Login failed, no redirection found. Please check the entered account, password, and IP.");
+        println!("Login post status: {}, final url: {}", status, final_url);
         Ok(false)
     }
 }
