@@ -1,10 +1,10 @@
 # DLUT 自动登录 - Rust 版本
 
-大连理工大学（DLUT）*开发区校区*校园网自动登录工具的 Rust 实现。
+大连理工大学（DLUT）**开发区校区**校园网自动登录工具的 Rust 实现。
 
 ## 功能特性
 
-- 支持登录凭证的 3DES 加密
+- 完全模拟官网des.js加密
 - 自动检测网络状态
 - 适用于嵌入式系统（如 OpenWrt）的轻量级 CLI
 - 同步 HTTP 请求（最小化二进制体积）
@@ -176,4 +176,4 @@ launchctl load ~/Library/LaunchAgents/com.user.dlut_login.plist
 
 ## 特别感谢
 
-原始 Python 项目（https://github.com/yangzhanwu/DLUT_auto_login）
+原始 Python 项目(https://github.com/yangzhanwu/DLUT_auto_login)
