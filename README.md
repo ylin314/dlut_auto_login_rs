@@ -1,84 +1,84 @@
-# DLUT Auto Login - Rust Version
+# DLUT 自动登录 - Rust 版本
 
-Rust implementation of the DLUT (Dalian University of Technology) campus network auto-login tool.
+大连理工大学（DLUT）*开发区校区*校园网自动登录工具的 Rust 实现。
 
-## Features
+## 功能特性
 
-- 3DES encryption support for login credentials
-- Automatic network status detection
-- Lightweight CLI for embedded systems (OpenWrt)
-- Synchronous HTTP requests (minimal binary size)
-- Auto-retry mechanism for unattended operation
+- 支持登录凭证的 3DES 加密
+- 自动检测网络状态
+- 适用于嵌入式系统（如 OpenWrt）的轻量级 CLI
+- 同步 HTTP 请求（最小化二进制体积）
+- 自动重试机制，适合无人值守运行
 
-## Build
+## 构建
 
 ```bash
 cargo build --release
-# Optional: Strip symbols for smaller binary
+# 可选：去除符号表以减小二进制文件大小
 strip target/release/dlut_auto_login_rs
 ```
 
-## Usage
+## 使用方法
 
-### Basic usage (one-time login):
+### 基本用法（单次登录）：
 
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password>
 ```
 
-### Get current network status:
+### 获取当前网络状态：
 
 ```bash
 ./dlut_auto_login_rs --info
 ```
 
-### Force login (skip status check):
+### 强制登录（跳过在线状态检查）：
 
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password> --force
 ```
 
-### Daemon mode (periodically check and login):
+### 守护进程模式（定期检查并登录）：
 
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password> --daemon
 ```
 
-### Specify IP address:
+### 指定 IP 地址：
 
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password> -i <ip_address>
 ```
 
-### Get help:
+### 获取帮助：
 
 ```bash
 ./dlut_auto_login_rs --help
 ```
 
-## Command-line Options
+## 命令行选项
 
-- `-u, --username <USERNAME>`: Username
-- `-p, --password <PASSWORD>`: Password
-- `-i, --ip <IP>`: IPV4 Address (optional, will auto-detect if not provided)
-- `--pid <PATH>`: Path to PID file (to ensure single instance)
-- `--info`: Get drcom info and exit
-- `--force`: Skip status check before login
-- `--daemon`: Daemon mode (periodically check status and login if offline)
+- `-u, --username <USERNAME>`: 用户名
+- `-p, --password <PASSWORD>`: 密码
+- `-i, --ip <IP>`: IPV4 地址（可选，未提供时将自动检测）
+- `--pid <PATH>`: PID 文件路径（用于确保单实例运行）
+- `--info`: 获取 drcom 信息并退出
+- `--force`: 登录前跳过状态检查
+- `--daemon`: 守护进程模式（定期检查状态并在掉线时登录）
 
-## Process Management
+## 进程管理
 
-### Using PID file
+### 使用 PID 文件
 
-To ensure only one instance is running, use the `--pid` option:
+使用 `--pid` 选项确保只有一个实例在运行：
 
 ```bash
 ./dlut_auto_login_rs -u <username> -p <password> --daemon --pid /tmp/dlut_login.pid
 ```
 
-### Using OpenWrt (procd)
+### 在 OpenWrt 上使用 (procd)
 
-Create a file at `/etc/init.d/dlut_login`:
+创建文件 `/etc/init.d/dlut_login`：
 
 ```bash
 #!/bin/sh /etc/rc.common
@@ -88,13 +88,13 @@ USE_PROCD=1
 
 start_service() {
     procd_open_instance
-    procd_set_param command /usr/bin/dlut_auto_login_rs -u "YOUR_USER" -p "YOUR_PASS" --daemon
+    procd_set_param command /usr/bin/dlut_auto_login_rs -u "你的用户名" -p "你的密码" --daemon
     procd_set_param respawn
     procd_close_instance
 }
 ```
 
-Then enable it:
+然后启用服务：
 
 ```bash
 chmod +x /etc/init.d/dlut_login
@@ -102,21 +102,21 @@ chmod +x /etc/init.d/dlut_login
 /etc/init.d/dlut_login start
 ```
 
-### Using Windows
+### 在 Windows 上使用
 
-1.  **Task Scheduler (Recommended)**:
-    - Open "Task Scheduler".
-    - Create a new task, set trigger to "At log on".
-    - Set action to "Start a program", select `dlut_auto_login_rs.exe`.
-    - Add arguments: `-u USER -p PASS --daemon --pid C:\path\to\login.pid`.
-2.  **Startup Folder**:
-    - Press `Win + R`, type `shell:startup`.
-    - Create a shortcut to `dlut_auto_login_rs.exe` in this folder.
-    - Right-click shortcut -> Properties -> Target, append arguments after the path.
+1.  **任务计划程序 (推荐)**：
+    - 打开“任务计划程序”。
+    - 创建新任务，设置触发器为“登录时”。
+    - 操作设置为“启动程序”，选择 `dlut_auto_login_rs.exe`。
+    - 添加参数：`-u 用户名 -p 密码 --daemon --pid C:\path\to\login.pid`。
+2.  **启动文件夹**：
+    - 按下 `Win + R`，输入 `shell:startup`。
+    - 在该目录下创建一个指向 `dlut_auto_login_rs.exe` 的快捷方式。
+    - 右键快捷方式 -> 属性 -> 目标，在路径后添加参数。
 
-### Using macOS (launchd)
+### 在 macOS 上使用 (launchd)
 
-Create `~/Library/LaunchAgents/com.user.dlut_login.plist`:
+创建 `~/Library/LaunchAgents/com.user.dlut_login.plist`：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -129,9 +129,9 @@ Create `~/Library/LaunchAgents/com.user.dlut_login.plist`:
     <array>
         <string>/path/to/dlut_auto_login_rs</string>
         <string>-u</string>
-        <string>YOUR_USER</string>
+        <string>你的用户名</string>
         <string>-p</string>
-        <string>YOUR_PASS</string>
+        <string>你的密码</string>
         <string>--daemon</string>
         <string>--pid</string>
         <string>/tmp/dlut_login.pid</string>
@@ -144,35 +144,36 @@ Create `~/Library/LaunchAgents/com.user.dlut_login.plist`:
 </plist>
 ```
 
-Then load the task:
+然后加载任务：
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.user.dlut_login.plist
 ```
 
-## Project Structure
+## 项目结构
 
-- `src/main.rs` - Entry point and CLI handling
-- `src/des_crypto.rs` - 3DES encryption/decryption implementation
-- `src/drcom.rs` - DrCOM protocol handling (network status checking)
-- `src/login.rs` - Login logic and form handling
+- `src/main.rs` - 入口点和 CLI 处理
+- `src/des_crypto.rs` - 3DES 加密/解密实现
+- `src/drcom.rs` - DrCOM 协议处理（网络状态检查）
+- `src/login.rs` - 登录逻辑和表单处理
 
-## Dependencies
+## 依赖项
 
-- `ureq` - Minimal synchronous HTTP client
-- `des` - 3DES encryption
-- `hex` - Hex encoding/decoding
-- `serde` - Serialization framework
-- `serde_json` - JSON parsing
-- `argh` - Minimal command-line parsing
+- `ureq` - 极简同步 HTTP 客户端（支持 JSON 和 Cookies）
+- `cookie_store` - Cookie 存储和管理
+- `scraper` - HTML 解析和 CSS 选择器
+- `serde` - 序列化框架
+- `serde_json` - JSON 解析
+- `argh` - 极简命令行参数解析
+- `ctrlc` - Ctrl-C 信号处理
 
-## Notes
+## 注意事项
 
-- This tool is optimized for embedded systems (e.g., OpenWrt)
-- Interactive mode has been removed for daemon/script usage
-- The tool checks if you're already online before attempting login
-- In daemon mode, the tool periodically checks the network status and logs in if disconnected.
+- 本工具针对嵌入式系统（如 OpenWrt）进行了优化
+- 移除了交互模式，以便于作为守护进程/脚本使用
+- 工具在尝试登录前会检查是否已经在线
+- 在守护进程模式下，工具会定期检查网络状态，如果掉线则自动执行登录。
 
-## License
+## 特别感谢
 
-Same as the original Python project
+原始 Python 项目（https://github.com/yangzhanwu/DLUT_auto_login）
