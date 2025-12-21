@@ -5,6 +5,17 @@ use scraper::{Html, Selector};
 use std::thread;
 use std::time::Duration;
 
+const DEFAULT_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+
+fn extract_text_first(document: &Html, selector: &str) -> Option<String> {
+    let sel = Selector::parse(selector).ok()?;
+    document
+        .select(&sel)
+        .next()
+        .map(|n| n.text().collect::<String>().trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Extract value from HTML input element by a specific attribute (e.g., "id" or "name")
 fn extract_input_value(
     document: &Html,
@@ -44,6 +55,11 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
     // First request to get the login form
     let response = agent
         .get(&initial_url)
+        .set("User-Agent", DEFAULT_UA)
+        .set(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .timeout(Duration::from_secs(10))
         .call()?;
 
@@ -93,6 +109,13 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
     // Submit login form
     let login_response = agent
         .post(&sso_login_url_str)
+        .set("User-Agent", DEFAULT_UA)
+        .set(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        .set("Referer", &sso_login_url_str)
+        .set("Origin", "https://sso.dlut.edu.cn")
         .timeout(Duration::from_secs(10))
         .send_form(&login_data)?;
 
@@ -126,17 +149,16 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
 
         // Minimal diagnostics (avoid printing sensitive data)
         println!("Login post status: {}, final url: {}", status, final_url);
-        if let Ok(title_sel) = Selector::parse("title") {
-            if let Some(title) = Html::parse_document(&response_body)
-                .select(&title_sel)
-                .next()
-                .map(|t| t.text().collect::<String>())
-            {
-                let title = title.trim();
-                if !title.is_empty() {
-                    println!("Response title: {}", title);
-                }
-            }
+        let resp_doc = Html::parse_document(&response_body);
+        if let Some(title) = extract_text_first(&resp_doc, "title") {
+            println!("Response title: {}", title);
+        }
+        if let Some(msg) = extract_text_first(&resp_doc, "#errormsg")
+            .or_else(|| extract_text_first(&resp_doc, ".errors"))
+            .or_else(|| extract_text_first(&resp_doc, ".alert"))
+            .or_else(|| extract_text_first(&resp_doc, "#msg"))
+        {
+            println!("Response message: {}", msg);
         }
 
         println!("Login failed: drcom still offline after redirect.");
@@ -145,6 +167,18 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
         // Minimal diagnostics (avoid printing sensitive data)
         println!("Login failed, no redirection found. Please check the entered account, password, and IP.");
         println!("Login post status: {}, final url: {}", status, final_url);
+
+        let resp_doc = Html::parse_document(&response_body);
+        if let Some(title) = extract_text_first(&resp_doc, "title") {
+            println!("Response title: {}", title);
+        }
+        if let Some(msg) = extract_text_first(&resp_doc, "#errormsg")
+            .or_else(|| extract_text_first(&resp_doc, ".errors"))
+            .or_else(|| extract_text_first(&resp_doc, ".alert"))
+            .or_else(|| extract_text_first(&resp_doc, "#msg"))
+        {
+            println!("Response message: {}", msg);
+        }
         Ok(false)
     }
 }
