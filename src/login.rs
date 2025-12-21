@@ -1,5 +1,6 @@
 use crate::des_crypto::str_enc;
 use crate::drcom;
+use cookie_store::CookieStore;
 use scraper::{Html, Selector};
 use std::thread;
 use std::time::Duration;
@@ -35,7 +36,10 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
 
     println!("Initial login URL: {}", initial_url);
 
-    let agent = ureq::agent();
+    let agent = ureq::AgentBuilder::new()
+        .cookie_store(CookieStore::default())
+        .redirects(10)
+        .build();
 
     // First request to get the login form
     let response = agent
@@ -87,9 +91,16 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
         .timeout(Duration::from_secs(10))
         .send_form(&login_data)?;
 
-    // Check if login was successful by checking for redirection
-    let current_url = login_response.get_url();
-    if !current_url.contains(&sso_login_url_str) {
+    // Check if login was successful by checking for redirection (similar to Python requests' `response.history`)
+    let status = login_response.status();
+    let location = login_response.header("location");
+    let final_url = login_response.get_url();
+
+    let redirected = (300..400).contains(&status)
+        || location.is_some()
+        || final_url != sso_login_url_str;
+
+    if redirected {
         println!("Redirection detected...");
 
         // Wait 5 seconds for backend to refresh data
