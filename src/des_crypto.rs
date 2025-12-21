@@ -1,90 +1,91 @@
+use des::cipher::generic_array::GenericArray;
 use des::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
-use des::TdesEde3;
+use des::Des;
 
-/// Get an 8-byte DES key from a string
-fn get_des_key(key: &str) -> [u8; 8] {
-    let mut res = [0u8; 8];
-    let bytes = key.as_bytes();
-    let len = bytes.len().min(8);
-    res[..len].copy_from_slice(&bytes[..len]);
-    res
+/// 将密钥组合并确保长度为8字节（DES密钥长度）
+fn combine_keys(key: &str) -> GenericArray<u8, des::cipher::consts::U8> {
+    let key_bytes = key.as_bytes();
+    let mut result = [0u8; 8];
+
+    // 复制密钥字节，最多8个
+    let copy_len = key_bytes.len().min(8);
+    result[..copy_len].copy_from_slice(&key_bytes[..copy_len]);
+
+    // 如果密钥长度不足8，剩余部分已经是0（用\0填充）
+    GenericArray::clone_from_slice(&result)
 }
 
-/// PKCS#7 padding
+/// PKCS7填充
 fn pkcs7_pad(data: &[u8], block_size: usize) -> Vec<u8> {
+    let padding_len = block_size - (data.len() % block_size);
     let mut padded = data.to_vec();
-    let padding_length = block_size - (data.len() % block_size);
-    padded.extend(std::iter::repeat(padding_length as u8).take(padding_length));
+    padded.extend(vec![padding_len as u8; padding_len]);
     padded
 }
 
-/// Remove PKCS#7 padding
-#[allow(dead_code)]
-fn pkcs7_unpad(data: &[u8]) -> Result<Vec<u8>, String> {
+/// 使用DES加密（支持Triple DES）
+/// 参数: data (明文字符串), first_key, second_key, third_key
+/// 返回值: 十六进制加密字符串（大写）
+pub fn str_enc(data: &str, first_key: &str, second_key: &str, third_key: &str) -> String {
     if data.is_empty() {
-        return Err("Data is empty".to_string());
+        return String::new();
     }
 
-    let padding_length = data[data.len() - 1] as usize;
-    if padding_length > 8 || padding_length == 0 {
-        return Err("Invalid padding".to_string());
-    }
+    // 将字符串转换为字节并进行PKCS7填充
+    let plain_bytes = pkcs7_pad(data.as_bytes(), 8);
 
-    Ok(data[..data.len() - padding_length].to_vec())
-}
+    let encrypted = if !first_key.is_empty() && !second_key.is_empty() && !third_key.is_empty() {
+        // Triple DES (3DES) - E-D-E 模式
+        let key1 = combine_keys(first_key);
+        let key2 = combine_keys(second_key);
+        let key3 = combine_keys(third_key);
 
-/// Encrypt data using Triple DES (3DES) - E-D-E mode
-pub fn str_enc(
-    data: &str,
-    first_key: &str,
-    second_key: &str,
-    third_key: &str,
-) -> Result<String, String> {
-    if data.is_empty() {
-        return Ok(String::new());
-    }
+        let cipher1 = Des::new(&key1);
+        let cipher2 = Des::new(&key2);
+        let cipher3 = Des::new(&key3);
 
-    let mut key = [0u8; 24];
-    key[0..8].copy_from_slice(&get_des_key(first_key));
-    key[8..16].copy_from_slice(&get_des_key(second_key));
-    key[16..24].copy_from_slice(&get_des_key(third_key));
+        // 对每个8字节块进行加密
+        let mut result = plain_bytes.clone();
+        for chunk in result.chunks_mut(8) {
+            let block = GenericArray::from_mut_slice(chunk);
+            // E-D-E: 加密 -> 解密 -> 加密
+            cipher1.encrypt_block(block);
+            cipher2.decrypt_block(block);
+            cipher3.encrypt_block(block);
+        }
+        result
+    } else if !first_key.is_empty() && !second_key.is_empty() {
+        // Double DES
+        let key1 = combine_keys(first_key);
+        let key2 = combine_keys(second_key);
 
-    let cipher = TdesEde3::new(&key.into());
-    let mut block = pkcs7_pad(data.as_bytes(), 8);
+        let cipher1 = Des::new(&key1);
+        let cipher2 = Des::new(&key2);
 
-    for chunk in block.chunks_mut(8) {
-        cipher.encrypt_block(chunk.into());
-    }
+        let mut result = plain_bytes.clone();
+        for chunk in result.chunks_mut(8) {
+            let block = GenericArray::from_mut_slice(chunk);
+            cipher1.encrypt_block(block);
+            cipher2.encrypt_block(block);
+        }
+        result
+    } else if !first_key.is_empty() {
+        // Single DES
+        let key = combine_keys(first_key);
+        let cipher = Des::new(&key);
 
-    Ok(hex::encode(block).to_uppercase())
-}
+        let mut result = plain_bytes.clone();
+        for chunk in result.chunks_mut(8) {
+            let block = GenericArray::from_mut_slice(chunk);
+            cipher.encrypt_block(block);
+        }
+        result
+    } else {
+        return String::new();
+    };
 
-/// Decrypt data using Triple DES (3DES) - D-E-D mode
-#[allow(dead_code)]
-pub fn str_dec(
-    data: &str,
-    first_key: &str,
-    second_key: &str,
-    third_key: &str,
-) -> Result<String, String> {
-    if data.is_empty() {
-        return Ok(String::new());
-    }
-
-    let mut key = [0u8; 24];
-    key[0..8].copy_from_slice(&get_des_key(first_key));
-    key[8..16].copy_from_slice(&get_des_key(second_key));
-    key[16..24].copy_from_slice(&get_des_key(third_key));
-
-    let cipher = TdesEde3::new(&key.into());
-    let mut block = hex::decode(data).map_err(|e| format!("Hex decode error: {}", e))?;
-
-    for chunk in block.chunks_mut(8) {
-        cipher.decrypt_block(chunk.into());
-    }
-
-    let unpadded = pkcs7_unpad(&block).unwrap_or(block);
-    Ok(String::from_utf8_lossy(&unpadded).to_string())
+    // 转换为大写十六进制字符串
+    hex::encode_upper(encrypted)
 }
 
 #[cfg(test)]
@@ -92,10 +93,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_str_enc_dec() {
-        let data = "test";
-        let encrypted = str_enc(data, "1", "2", "3").unwrap();
-        let decrypted = str_dec(&encrypted, "1", "2", "3").unwrap();
-        assert_eq!(data, decrypted);
+    fn test_str_enc_single_key() {
+        // 测试单密钥加密
+        let result = str_enc("test", "key12345", "", "");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_str_enc_triple_key() {
+        // 测试三重DES加密
+        let result = str_enc("test", "key1", "key2", "key3");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_str_enc_empty_data() {
+        // 测试空数据
+        let result = str_enc("", "key1", "key2", "key3");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_str_enc_compatibility_with_python() {
+        // 测试与Python实现的兼容性
+        // Python: str_enc('testdata123', '1', '2', '3') == '2E155BA67E5D4D70350A99EA5F209F8D'
+        let result = str_enc("testdata123", "1", "2", "3");
+        assert_eq!(result, "2E155BA67E5D4D70350A99EA5F209F8D");
+    }
+
+    #[test]
+    fn test_str_enc_no_key() {
+        // 测试无密钥
+        let result = str_enc("test", "", "", "");
+        assert!(result.is_empty());
     }
 }

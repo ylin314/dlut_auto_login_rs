@@ -86,7 +86,7 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
             "1",
             "2",
             "3",
-        )?;
+        );
 
         println!("Login form:");
         println!(
