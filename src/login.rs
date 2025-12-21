@@ -4,10 +4,14 @@ use scraper::{Html, Selector};
 use std::thread;
 use std::time::Duration;
 
-/// Extract value from HTML element by id or name using Scraper
-fn extract_value_by_id_or_name(document: &Html, attr_value: &str) -> Result<String, String> {
-    // Selector for input[id="value"] or input[name="value"]
-    let selector_str = format!("input[id='{0}'], input[name='{0}']", attr_value);
+/// Extract value from HTML input element by a specific attribute (e.g., "id" or "name")
+fn extract_input_value(
+    document: &Html,
+    attr_name: &str,
+    attr_value: &str,
+) -> Result<String, String> {
+    // Selector for input[attr_name="value"]
+    let selector_str = format!("input[{0}='{1}']", attr_name, attr_value);
     let selector = Selector::parse(&selector_str).map_err(|_| "Invalid selector".to_string())?;
 
     if let Some(element) = document.select(&selector).next() {
@@ -17,8 +21,8 @@ fn extract_value_by_id_or_name(document: &Html, attr_value: &str) -> Result<Stri
     }
 
     Err(format!(
-        "Element with id or name = {} not found or has no value!",
-        attr_value
+        "Element with {} = {} not found or has no value!",
+        attr_name, attr_value
     ))
 }
 
@@ -48,13 +52,13 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
     let body = response.into_string()?;
     let document = Html::parse_document(&body);
 
-    let lt_value = extract_value_by_id_or_name(&document, "lt")?;
+    let lt_value = extract_input_value(&document, "id", "lt")?;
     // println!("lt: {}", lt_value);
 
-    let execution_value = extract_value_by_id_or_name(&document, "execution")?;
+    let execution_value = extract_input_value(&document, "name", "execution")?;
     // println!("execution: {}", execution_value);
 
-    let event_id_value = extract_value_by_id_or_name(&document, "_eventId")?;
+    let event_id_value = extract_input_value(&document, "name", "_eventId")?;
     // println!("_eventId: {}", event_id_value);
 
     // Prepare login data
@@ -88,8 +92,8 @@ fn do_login(username: &str, password: &str, ip: &str) -> Result<bool, Box<dyn st
     if !current_url.contains(&sso_login_url_str) {
         println!("Redirection detected...");
 
-        // Wait 3 seconds for backend to refresh data
-        thread::sleep(Duration::from_secs(3));
+        // Wait 5 seconds for backend to refresh data
+        thread::sleep(Duration::from_secs(5));
 
         if let Ok(Some(info)) = drcom::get_drcom_info() {
             if info.result == 1 {
